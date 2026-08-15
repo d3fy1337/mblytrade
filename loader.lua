@@ -1,437 +1,296 @@
-const json = (data, status = 200) =>
-  Response.json(data, { status });
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
-const randomKey = () => {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
-  const part = () =>
-    Array.from(
-      { length: 4 },
-      () => chars[Math.floor(Math.random() * chars.length)]
-    ).join("");
+local API_URL = "https://mbly-license.d3fy1337.workers.dev"
 
-  return `MBLY-${part()}-${part()}-${part()}`;
-};
+local request = (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or request
+    or (fluxus and fluxus.request)
 
-async function getScript(env) {
-  if (!env.GITHUB_TOKEN) {
-    throw new Error("GITHUB_TOKEN is not configured");
-  }
+if not request then
+    warn("MBLYTRADE: HTTP request is not supported")
+    return
+end
 
-  const response = await fetch(
-    "https://api.github.com/repos/d3fy1337/main/contents/mblytrade.lua?ref=main",
-    {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
-        "Accept": "application/vnd.github.raw+json",
-        "User-Agent": "MBLYTRADE-Worker"
-      }
-    }
-  );
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "MBLYTRADE_LOADER"
+GUI.ResetOnSpawn = false
+GUI.IgnoreGuiInset = true
+GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+GUI.Parent = PlayerGui
 
-  const body = await response.text();
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(320, 190)
+Main.Position = UDim2.new(0.5, -160, 0.5, -95)
+Main.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+Main.BorderSizePixel = 0
+Main.Parent = GUI
 
-  if (!response.ok) {
-    throw new Error(`GitHub ${response.status}: ${body}`);
-  }
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
 
-  if (!body.trim()) {
-    throw new Error("GitHub returned an empty script");
-  }
+local Stroke = Instance.new("UIStroke", Main)
+Stroke.Color = Color3.fromRGB(255, 205, 70)
+Stroke.Transparency = 0.35
 
-  return body;
-}
+local Title = Instance.new("TextLabel")
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.fromOffset(20, 15)
+Title.Size = UDim2.new(1, -40, 0, 28)
+Title.Font = Enum.Font.GothamBlack
+Title.Text = "MBLYTRADE"
+Title.TextSize = 20
+Title.TextColor3 = Color3.fromRGB(255, 210, 75)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
 
-async function getLicense(env, key) {
-  return await env.MBLY_DB
-    .prepare(`
-      SELECT *
-      FROM licenses
-      WHERE license_key = ?
-      LIMIT 1
-    `)
-    .bind(String(key).trim())
-    .first();
-}
+local Sub = Instance.new("TextLabel")
+Sub.BackgroundTransparency = 1
+Sub.Position = UDim2.fromOffset(20, 43)
+Sub.Size = UDim2.new(1, -40, 0, 20)
+Sub.Font = Enum.Font.GothamMedium
+Sub.Text = "Enter your license key"
+Sub.TextSize = 10
+Sub.TextColor3 = Color3.fromRGB(130, 130, 140)
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.Parent = Main
 
-async function validateLicense(env, key, userId) {
-  const cleanKey = String(key).trim();
-  const cleanUserId = String(userId);
+local Box = Instance.new("TextBox")
+Box.Position = UDim2.fromOffset(20, 75)
+Box.Size = UDim2.new(1, -40, 0, 38)
+Box.BackgroundColor3 = Color3.fromRGB(23, 23, 29)
+Box.BorderSizePixel = 0
+Box.ClearTextOnFocus = false
+Box.Font = Enum.Font.GothamMedium
+Box.PlaceholderText = "MBLY-XXXX-XXXX-XXXX"
+Box.PlaceholderColor3 = Color3.fromRGB(80, 80, 90)
+Box.Text = ""
+Box.TextColor3 = Color3.fromRGB(235, 235, 240)
+Box.TextSize = 12
+Box.Parent = Main
 
-  const license = await getLicense(env, cleanKey);
+Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 8)
 
-  if (!license) {
-    return {
-      valid: false,
-      error: "Invalid license"
-    };
-  }
+local Button = Instance.new("TextButton")
+Button.Position = UDim2.fromOffset(20, 122)
+Button.Size = UDim2.new(1, -40, 0, 35)
+Button.BackgroundColor3 = Color3.fromRGB(255, 205, 70)
+Button.BorderSizePixel = 0
+Button.Font = Enum.Font.GothamBold
+Button.Text = "VERIFY LICENSE"
+Button.TextColor3 = Color3.fromRGB(20, 20, 20)
+Button.TextSize = 11
+Button.Parent = Main
 
-  if (Number(license.active) !== 1) {
-    return {
-      valid: false,
-      error: "License disabled"
-    };
-  }
+Instance.new("UICorner", Button).CornerRadius = UDim.new(0, 8)
 
-  if (
-    license.expires_at &&
-    license.expires_at !== "lifetime"
-  ) {
-    const expires = new Date(license.expires_at);
+local Status = Instance.new("TextLabel")
+Status.BackgroundTransparency = 1
+Status.Position = UDim2.fromOffset(20, 160)
+Status.Size = UDim2.new(1, -40, 0, 20)
+Status.Font = Enum.Font.GothamMedium
+Status.Text = ""
+Status.TextSize = 9
+Status.TextColor3 = Color3.fromRGB(150, 150, 160)
+Status.TextXAlignment = Enum.TextXAlignment.Center
+Status.Parent = Main
 
-    if (
-      Number.isNaN(expires.getTime()) ||
-      expires <= new Date()
-    ) {
-      return {
-        valid: false,
-        error: "License expired"
-      };
-    }
-  }
+local function SetStatus(text, color)
+    Status.Text = text
+    Status.TextColor3 = color
+end
 
-  if (
-    license.user_id &&
-    String(license.user_id) !== cleanUserId
-  ) {
-    return {
-      valid: false,
-      error: "License is bound to another user"
-    };
-  }
+local function Verify(key)
+    local response
 
-  if (!license.user_id) {
-    await env.MBLY_DB
-      .prepare(`
-        UPDATE licenses
-        SET user_id = ?
-        WHERE license_key = ?
-      `)
-      .bind(
-        cleanUserId,
-        cleanKey
-      )
-      .run();
-  }
-
-  return {
-    valid: true,
-    expires: license.expires_at || "lifetime"
-  };
-}
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-
-    if (
-      request.method === "GET" &&
-      url.pathname === "/"
-    ) {
-      return new Response(
-        "MBLYTRADE License API",
-        {
-          status: 200,
-          headers: {
-            "Content-Type":
-              "text/plain; charset=utf-8"
-          }
-        }
-      );
-    }
-
-    if (
-      request.method === "POST" &&
-      url.pathname === "/verify"
-    ) {
-      try {
-        const body = await request.json();
-
-        if (!body.key || !body.userId) {
-          return json(
-            {
-              valid: false,
-              error: "Missing key or userId"
+    local success, requestError = pcall(function()
+        response = request({
+            Url = API_URL .. "/verify",
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
             },
-            400
-          );
-        }
+            Body = HttpService:JSONEncode({
+                key = key,
+                userId = tostring(Player.UserId)
+            })
+        })
+    end)
 
-        const result = await validateLicense(
-          env,
-          body.key,
-          body.userId
-        );
+    if not success or not response then
+        warn("MBLYTRADE VERIFY REQUEST ERROR:", requestError)
+        return false, "Connection failed"
+    end
 
-        if (!result.valid) {
-          return json({
-            valid: false,
-            error: result.error
-          });
-        }
+    warn("MBLYTRADE /verify STATUS:", response.StatusCode)
+    warn("MBLYTRADE /verify BODY:", response.Body)
 
-        return json({
-          valid: true,
-          expires: result.expires
-        });
-      } catch (error) {
-        return json(
-          {
-            valid: false,
-            error: String(error)
-          },
-          500
-        );
-      }
-    }
+    if tonumber(response.StatusCode) ~= 200 then
+        return false, "Server error"
+    end
 
-    if (
-      request.method === "POST" &&
-      url.pathname === "/script"
-    ) {
-      try {
-        const body = await request.json();
+    local data
 
-        if (!body.key || !body.userId) {
-          return json(
-            {
-              error: "Missing key or userId"
+    local decoded, decodeError = pcall(function()
+        data = HttpService:JSONDecode(response.Body)
+    end)
+
+    if not decoded or not data then
+        warn("MBLYTRADE VERIFY JSON ERROR:", decodeError)
+        return false, "Invalid server response"
+    end
+
+    if data.valid ~= true then
+        return false, data.error or "Invalid license"
+    end
+
+    return true, data.expires or "lifetime"
+end
+
+local function LoadScript(key)
+    local response
+
+    local success, requestError = pcall(function()
+        response = request({
+            Url = API_URL .. "/script",
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
             },
-            400
-          );
-        }
+            Body = HttpService:JSONEncode({
+                key = key,
+                userId = tostring(Player.UserId)
+            })
+        })
+    end)
 
-        const result = await validateLicense(
-          env,
-          body.key,
-          body.userId
-        );
+    if not success or not response then
+        warn("MBLYTRADE SCRIPT REQUEST ERROR:", requestError)
+        return false, "Connection failed"
+    end
 
-        if (!result.valid) {
-          return json(
-            {
-              error: result.error
-            },
-            403
-          );
-        }
+    warn("MBLYTRADE /script STATUS:", response.StatusCode)
+    warn("MBLYTRADE /script BODY:", response.Body)
 
-        const script = await getScript(env);
+    if tonumber(response.StatusCode) ~= 200 then
+        local serverMessage
 
-        return new Response(
-          script,
-          {
-            status: 200,
-            headers: {
-              "Content-Type":
-                "text/plain; charset=utf-8",
-              "Cache-Control":
-                "no-store"
-            }
-          }
-        );
-      } catch (error) {
-        return json(
-          {
-            error: String(error)
-          },
-          500
-        );
-      }
-    }
+        pcall(function()
+            local data = HttpService:JSONDecode(response.Body)
 
-    const auth =
-      request.headers.get("Authorization");
+            if data and data.error then
+                serverMessage = tostring(data.error)
+            end
+        end)
 
-    if (
-      !auth ||
-      auth !== `Bearer ${env.ADMIN_SECRET}`
-    ) {
-      return json(
-        {
-          error: "Unauthorized"
-        },
-        401
-      );
-    }
+        return false, serverMessage or "Script access denied"
+    end
 
-    if (
-      request.method === "POST" &&
-      url.pathname === "/admin/create"
-    ) {
-      try {
-        const body = await request.json();
+    if not response.Body or response.Body == "" then
+        return false, "Empty script"
+    end
 
-        const key =
-          body.key || randomKey();
+    local loaded, compileError = loadstring(response.Body)
 
-        const userId =
-          body.userId
-            ? String(body.userId)
-            : null;
+    if not loaded then
+        warn("MBLYTRADE COMPILE ERROR:", compileError)
+        return false, "Script compilation failed"
+    end
 
-        const expires =
-          body.expires || "lifetime";
+    local executed, executeError = pcall(loaded)
 
-        await env.MBLY_DB
-          .prepare(`
-            INSERT INTO licenses
-            (
-              license_key,
-              user_id,
-              active,
-              expires_at
-            )
-            VALUES (?, ?, 1, ?)
-          `)
-          .bind(
-            key,
-            userId,
-            expires
-          )
-          .run();
+    if not executed then
+        warn("MBLYTRADE EXECUTION ERROR:", executeError)
+        return false, "Script execution failed"
+    end
 
-        return json({
-          success: true,
-          key,
-          userId,
-          expires
-        });
-      } catch (error) {
-        return json(
-          {
-            success: false,
-            error: String(error)
-          },
-          400
-        );
-      }
-    }
+    return true
+end
 
-    if (
-      request.method === "POST" &&
-      url.pathname === "/admin/revoke"
-    ) {
-      try {
-        const body = await request.json();
+local function Start()
+    local key = Box.Text:gsub("%s+", "")
 
-        if (!body.key) {
-          return json(
-            {
-              success: false
-            },
-            400
-          );
-        }
+    if key == "" then
+        SetStatus(
+            "Enter a license key",
+            Color3.fromRGB(255, 100, 100)
+        )
+        return
+    end
 
-        const result =
-          await env.MBLY_DB
-            .prepare(`
-              UPDATE licenses
-              SET active = 0
-              WHERE license_key = ?
-            `)
-            .bind(
-              String(body.key).trim()
-            )
-            .run();
+    Button.Active = false
+    Button.AutoButtonColor = false
+    Box.TextEditable = false
 
-        return json({
-          success:
-            result.meta.changes > 0
-        });
-      } catch {
-        return json(
-          {
-            success: false
-          },
-          500
-        );
-      }
-    }
+    SetStatus(
+        "Checking license...",
+        Color3.fromRGB(255, 210, 75)
+    )
 
-    if (
-      request.method === "POST" &&
-      url.pathname === "/admin/reset"
-    ) {
-      try {
-        const body = await request.json();
+    local valid, result = Verify(key)
 
-        if (!body.key) {
-          return json(
-            {
-              success: false
-            },
-            400
-          );
-        }
+    if not valid then
+        SetStatus(
+            result,
+            Color3.fromRGB(255, 100, 100)
+        )
 
-        const result =
-          await env.MBLY_DB
-            .prepare(`
-              UPDATE licenses
-              SET user_id = NULL
-              WHERE license_key = ?
-            `)
-            .bind(
-              String(body.key).trim()
-            )
-            .run();
+        Button.Active = true
+        Button.AutoButtonColor = true
+        Box.TextEditable = true
 
-        return json({
-          success:
-            result.meta.changes > 0
-        });
-      } catch {
-        return json(
-          {
-            success: false
-          },
-          500
-        );
-      }
-    }
+        return
+    end
 
-    if (
-      request.method === "GET" &&
-      url.pathname === "/admin/list"
-    ) {
-      try {
-        const result =
-          await env.MBLY_DB
-            .prepare(`
-              SELECT
-                id,
-                license_key,
-                user_id,
-                active,
-                expires_at
-              FROM licenses
-              ORDER BY id DESC
-            `)
-            .all();
+    SetStatus(
+        "License verified",
+        Color3.fromRGB(100, 255, 145)
+    )
 
-        return json({
-          success: true,
-          licenses: result.results
-        });
-      } catch {
-        return json(
-          {
-            success: false
-          },
-          500
-        );
-      }
-    }
+    task.wait(0.5)
 
-    return new Response(
-      "Not Found",
-      {
-        status: 404
-      }
-    );
-  }
-};
+    SetStatus(
+        "Loading MBLYTRADE...",
+        Color3.fromRGB(255, 210, 75)
+    )
+
+    local loaded, errorMessage = LoadScript(key)
+
+    if not loaded then
+        SetStatus(
+            errorMessage,
+            Color3.fromRGB(255, 100, 100)
+        )
+
+        Button.Active = true
+        Button.AutoButtonColor = true
+        Box.TextEditable = true
+
+        return
+    end
+
+    GUI:Destroy()
+end
+
+Button.MouseButton1Click:Connect(Start)
+
+Box.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        Start()
+    end
+end)
+
+UIS.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.G then
+        return
+    end
+end)
